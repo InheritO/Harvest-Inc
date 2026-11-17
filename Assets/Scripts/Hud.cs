@@ -139,9 +139,9 @@ namespace HarvestInc
         /// <summary>키보드 키를 손가락 하나처럼 다룬다 (터치 포인터 id와 겹치지 않는 값).</summary>
         const int KeyPointerId = -1000;
 
+        /// <summary>PC: 스페이스바 = 수확 버튼 (모든 빌드에서 동작).</summary>
         void PollKeyboard()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb == null) return;
             int i = pointers.IndexOf(KeyPointerId);
@@ -156,7 +156,6 @@ namespace HarvestInc
                 pointers.RemoveAt(i);
                 heldTimes.RemoveAt(i);
             }
-#endif
         }
 
         void Update()

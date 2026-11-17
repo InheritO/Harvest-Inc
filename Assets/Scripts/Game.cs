@@ -81,10 +81,31 @@ namespace HarvestInc
             Unlocked[0] = true;
             FieldIndex = 0;
 
-            bool loaded = SaveSystem.TryLoad(out var data);
-            if (loaded) ApplySaveData(data);
+            LoadedFromSave = SaveSystem.TryLoad(out var data);
+            if (LoadedFromSave) ApplySaveData(data);
             SpawnField();
-            if (loaded) fx.Toast("저장된 게임을 불러왔다");
+            if (LoadedFromSave) fx.Toast("저장된 게임을 불러왔다");
+        }
+
+        /// <summary>이번 실행에서 저장 파일을 불러왔는가 (첫 실행이면 false).</summary>
+        public bool LoadedFromSave { get; private set; }
+
+        // ── 일시 정지 (타이틀, 가이드) ──
+
+        int pauseCount;
+        public bool Paused => pauseCount > 0;
+
+        /// <summary>여러 화면이 동시에 멈춰도 마지막 하나가 풀릴 때 재개되도록 센다.</summary>
+        public void PushPause()
+        {
+            pauseCount++;
+            Time.timeScale = 0f;
+        }
+
+        public void PopPause()
+        {
+            if (pauseCount > 0) pauseCount--;
+            if (pauseCount == 0) Time.timeScale = 1f;
         }
 
         void Update()
@@ -424,7 +445,7 @@ namespace HarvestInc
 
         public void Swing()
         {
-            if (Regenerating || AliveCount == 0) return;
+            if (Paused || Regenerating || AliveCount == 0) return;
             if (Target == null || !Target.Alive) Target = RandomAlive();
             var t = Target;
             fx.Slash(t.Index);
@@ -435,7 +456,7 @@ namespace HarvestInc
         public void TapCrop(int index)
         {
             var c = Crops[index];
-            if (Regenerating || !c.Alive) return;
+            if (Paused || Regenerating || !c.Alive) return;
             Target = c;
             Swing();
         }
@@ -608,13 +629,9 @@ namespace HarvestInc
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             var kb = UnityEngine.InputSystem.Keyboard.current;
-            if (kb == null) return;
-            if (kb.f1Key.wasPressedThisFrame)
-            {
-                double amount = Math.Max(1000, Field.Reward * Balance.CellCount * 10);
-                Earn(amount);
-                fx.Toast($"디버그: +{Num.Gain(amount)} 코인");
-            }
+            if (kb == null || Paused) return;
+            if (kb.f1Key.wasPressedThisFrame) DebugAddCoins();
+            if (kb.f2Key.wasPressedThisFrame) DebugHarvestAll();
             if (kb.f3Key.wasPressedThisFrame)
             {
                 Fame += 10;
@@ -625,12 +642,37 @@ namespace HarvestInc
                 GoldenSeeds += 5;
                 fx.Toast("디버그: 황금 씨앗 +5");
             }
-            if (kb.f2Key.wasPressedThisFrame && !Regenerating)
-            {
-                foreach (var c in Crops)
-                    if (c.Alive) Kill(c);
-            }
 #endif
+        }
+
+        /// <summary>디버그: 현재 밭 10판어치 코인 (최소 1,000).</summary>
+        public void DebugAddCoins()
+        {
+            double amount = Math.Max(1000, FieldReward(FieldIndex) * Balance.CellCount * 10);
+            Earn(amount);
+            sfx.Coin();
+            fx.Toast($"디버그: +{Num.Gain(amount)} 코인");
+        }
+
+        /// <summary>디버그: 남은 작물을 모두 수확 (보상 지급, 클리어 처리).</summary>
+        public void DebugHarvestAll()
+        {
+            if (Paused || Regenerating) return;
+            foreach (var c in Crops)
+                if (c.Alive) Kill(c);
+        }
+
+        /// <summary>디버그 "레벨업": 다음 밭을 명성 없이 열고 바로 이동.</summary>
+        public void DebugLevelUp()
+        {
+            int next = NextLockedIndex;
+            if (next < 0)
+            {
+                fx.Toast("디버그: 모든 밭을 이미 열었다");
+                return;
+            }
+            Fame += Balance.Fields[next].UnlockCost; // UnlockField가 차감하므로 미리 채워 둔다
+            UnlockField(next);
         }
     }
 }

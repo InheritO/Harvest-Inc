@@ -9,35 +9,52 @@ namespace HarvestInc
         const float ConfirmWindow = 3f;
 
         Game game;
-        Text info, resetLabel, saveLabel;
+        Text info, resetLabel, saveLabel, bgmValue, sfxValue;
         Image resetImg;
         float confirmUntil = -1f;
         float savedFlashUntil = -1f;
 
-        public static SettingsPanel Build(Game game, RectTransform parent)
+        public static SettingsPanel Build(Game game, RectTransform parent, Sfx sfx, System.Action onGuide)
         {
-            var bg = Ui.MakeImage("Settings", parent, new Vector2(0, Ui.Top(840)), new Vector2(900, 640),
+            var bg = Ui.MakeImage("Settings", parent, new Vector2(0, Ui.Top(840)), new Vector2(900, 960),
                 Palette.Panel, Ui.Rounded, raycast: true);
             var panel = bg.gameObject.AddComponent<SettingsPanel>();
             panel.game = game;
             var t = bg.transform;
 
-            Ui.MakeText("Title", t, new Vector2(-230, 260), new Vector2(360, 80), "설정", 56, Color.white,
+            Ui.MakeText("Title", t, new Vector2(-230, 420), new Vector2(360, 80), "설정", 56, Color.white,
                 TextAnchor.MiddleLeft, FontStyle.Bold);
-            Ui.MakeButton("Close", t, new Vector2(330, 260), new Vector2(170, 80), "닫기", 38,
+            Ui.MakeButton("Close", t, new Vector2(330, 420), new Vector2(170, 80), "닫기", 38,
                 Palette.Unaffordable, panel.Close, out _);
 
-            panel.info = Ui.MakeText("Info", t, new Vector2(0, 145), new Vector2(800, 110), "", 30,
+            // 소리 크기
+            panel.bgmValue = panel.VolumeRow(t, 300, "배경음악", SoundSettings.Bgm, SoundSettings.SetBgm);
+            panel.sfxValue = panel.VolumeRow(t, 200, "효과음", SoundSettings.Sfx, v =>
+            {
+                SoundSettings.SetSfx(v);
+                sfx.Coin(); // 움직이는 동안 크기를 바로 들어 볼 수 있게
+            });
+
+            panel.info = Ui.MakeText("Info", t, new Vector2(0, 95), new Vector2(800, 100), "", 30,
                 Palette.TextDim, TextAnchor.MiddleCenter);
 
-            Ui.MakeButton("SaveNow", t, new Vector2(0, 20), new Vector2(520, 100), "", 40, Palette.Shop,
+            Ui.MakeButton("SaveNow", t, new Vector2(-135, -20), new Vector2(250, 100), "", 38, Palette.Shop,
                 panel.OnSaveClicked, out panel.saveLabel);
+            Ui.MakeButton("Guide", t, new Vector2(135, -20), new Vector2(250, 100), "게임 방법", 38, Palette.Affordable,
+                () =>
+                {
+                    panel.Close();
+                    onGuide();
+                }, out _);
 
-            var reset = Ui.MakeButton("Reset", t, new Vector2(0, -130), new Vector2(520, 120), "", 38,
+            Ui.MakeButton("Quit", t, new Vector2(0, -135), new Vector2(520, 100), "저장하고 종료", 38,
+                Palette.Unaffordable, panel.OnQuitClicked, out _);
+
+            var reset = Ui.MakeButton("Reset", t, new Vector2(0, -262), new Vector2(520, 110), "", 36,
                 Palette.Unaffordable, panel.OnResetClicked, out panel.resetLabel);
             panel.resetImg = (Image)reset.targetGraphic;
 
-            Ui.MakeText("ResetNote", t, new Vector2(0, -250), new Vector2(820, 70),
+            Ui.MakeText("ResetNote", t, new Vector2(0, -372), new Vector2(820, 70),
                 "코인 · 명성 · 밭 · 농기계 · 강화 · 황금 씨앗 · 영구 강화 · 개척 단계가 모두 지워진다", 24,
                 Palette.TextDim, TextAnchor.MiddleCenter);
 
@@ -53,10 +70,33 @@ namespace HarvestInc
 
         public void Close() => gameObject.SetActive(false);
 
+        void OnDisable() => SoundSettings.Save(); // 창을 닫을 때 소리 설정을 디스크에 기록
+
+        /// <summary>이름 + 슬라이더 + 퍼센트 한 줄.</summary>
+        Text VolumeRow(Transform parent, float y, string label, float value, System.Action<float> onChanged)
+        {
+            Ui.MakeText(label, parent, new Vector2(-300, y), new Vector2(220, 60), label, 36, Color.white,
+                TextAnchor.MiddleLeft, FontStyle.Bold);
+            var percent = Ui.MakeText(label + "Value", parent, new Vector2(355, y), new Vector2(120, 60), "", 34,
+                Color.white, TextAnchor.MiddleRight);
+            Ui.MakeSlider(label + "Slider", parent, new Vector2(45, y), new Vector2(440, 40), value, onChanged);
+            return percent;
+        }
+
         void OnSaveClicked()
         {
             game.Save();
             savedFlashUntil = Time.unscaledTime + 1.2f;
+        }
+
+        void OnQuitClicked()
+        {
+            game.Save();
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false; // 에디터에서는 Play를 멈춘다
+#else
+            Application.Quit(); // iOS는 앱이 스스로 종료하는 것을 막으므로 동작하지 않는다
+#endif
         }
 
         void OnResetClicked()
@@ -81,6 +121,8 @@ namespace HarvestInc
             info.text = $"자동 저장: {Mathf.RoundToInt(Game.AutoSaveInterval)}초마다, 앱을 내리거나 끌 때\n마지막 저장: {last}";
 
             saveLabel.text = Time.unscaledTime <= savedFlashUntil ? "저장했다!" : "지금 저장";
+            bgmValue.text = Mathf.RoundToInt(SoundSettings.Bgm * 100f) + "%";
+            sfxValue.text = Mathf.RoundToInt(SoundSettings.Sfx * 100f) + "%";
 
             bool confirming = Time.unscaledTime <= confirmUntil;
             resetLabel.text = confirming ? "한 번 더 누르면\n모든 진행 삭제" : "데이터 초기화";

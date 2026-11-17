@@ -108,6 +108,48 @@ namespace HarvestInc
             return btn;
         }
 
+        /// <summary>0~1 가로 슬라이더. 트랙 아무 곳이나 눌러도 그 위치로 이동한다.</summary>
+        public static Slider MakeSlider(string name, Transform parent, Vector2 pos, Vector2 size, float value,
+            Action<float> onChanged)
+        {
+            var root = MakeNode(name, parent, pos, size);
+
+            var track = MakeImage("Track", root, Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.5f), Rounded,
+                raycast: true);
+            SetAnchors(track.rectTransform, new Vector2(0f, 0.3f), new Vector2(1f, 0.7f));
+
+            var fillArea = MakeNode("Fill Area", root, Vector2.zero, Vector2.zero);
+            SetAnchors(fillArea, new Vector2(0f, 0.3f), new Vector2(1f, 0.7f));
+            var fill = MakeImage("Fill", fillArea, Vector2.zero, Vector2.zero, Palette.Affordable, Rounded);
+
+            // 손잡이가 양 끝에서 트랙 밖으로 나가지 않도록 반지름만큼 안쪽에서 움직인다
+            const float handle = 52f;
+            var handleArea = MakeNode("Handle Slide Area", root, Vector2.zero, Vector2.zero);
+            SetAnchors(handleArea, Vector2.zero, Vector2.one);
+            handleArea.offsetMin = new Vector2(handle / 2f, 0f);
+            handleArea.offsetMax = new Vector2(-handle / 2f, 0f);
+            var knob = MakeImage("Handle", handleArea, Vector2.zero, new Vector2(handle, handle - size.y), Color.white,
+                Circle, raycast: true);
+
+            var slider = root.gameObject.AddComponent<Slider>();
+            slider.fillRect = fill.rectTransform;
+            slider.handleRect = knob.rectTransform;
+            slider.targetGraphic = knob;
+            slider.direction = Slider.Direction.LeftToRight;
+            slider.minValue = 0f;
+            slider.maxValue = 1f;
+            slider.SetValueWithoutNotify(value);
+            slider.onValueChanged.AddListener(v => onChanged(v));
+            return slider;
+        }
+
+        static void SetAnchors(RectTransform rt, Vector2 min, Vector2 max)
+        {
+            rt.anchorMin = min;
+            rt.anchorMax = max;
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+        }
+
         public static void Stretch(RectTransform rt)
         {
             rt.anchorMin = Vector2.zero;

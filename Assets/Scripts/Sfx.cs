@@ -48,6 +48,8 @@ namespace HarvestInc
 
         void Play(AudioClip clip, float volume, float pitchJitter, float minGap)
         {
+            volume *= SoundSettings.Sfx;
+            if (volume <= 0.001f) return;
             float now = Time.unscaledTime;
             if (lastPlayed.TryGetValue(clip, out float t) && now - t < minGap) return; // 한꺼번에 몰릴 때 과하게 겹치지 않게
             lastPlayed[clip] = now;

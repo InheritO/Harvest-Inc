@@ -34,6 +34,8 @@ namespace HarvestInc
             if (Object.FindAnyObjectByType<AudioListener>() == null) root.AddComponent<AudioListener>();
             var game = root.AddComponent<Game>();
             var sfx = root.AddComponent<Sfx>();
+            SoundSettings.Load();
+            root.AddComponent<Music>();
 
             // 캔버스: 1080×1920 기준, 화면 비율이 달라도 전체가 보이도록 Expand
             var canvasGo = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -77,7 +79,29 @@ namespace HarvestInc
             shop = ShopPanel.Build(game, safe, onPrestigeTab: () => { shop.Close(); prestige.Open(); });
             prestige = PrestigePanel.Build(game, safe, onShopTab: () => { prestige.Close(); shop.Toggle(); });
             fields = FieldPanel.Build(game, safe);
-            settings = SettingsPanel.Build(game, safe);
+            DebugPanel.Build(game, safe);
+
+            // 게임 방법은 전체 화면을 덮으므로 캔버스 바로 아래, 타이틀보다 위에 둔다
+            GuidePanel guide = null;
+            settings = SettingsPanel.Build(game, safe, sfx, onGuide: () => guide.Open());
+
+            // 타이틀: 처음 실행(저장 없음)이면 시작하자마자 게임 방법을 띄운다
+            var title = TitleScreen.Build(game, canvas.transform,
+                onGuide: () => guide.Open(),
+                onStarted: () =>
+                {
+                    if (!game.LoadedFromSave) guide.Open();
+                });
+            guide = GuidePanel.Build(game, canvas.transform);
+
+            // PC 단축키: ESC
+            var keys = root.AddComponent<Hotkeys>();
+            keys.Shop = shop;
+            keys.Fields = fields;
+            keys.Prestige = prestige;
+            keys.Settings = settings;
+            keys.Guide = guide;
+            keys.Title = title;
         }
 
         static void EnsureEventSystem()
