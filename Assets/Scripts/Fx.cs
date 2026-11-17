@@ -195,10 +195,14 @@ namespace HarvestInc
             p.Color = def.FxColor;
         }
 
-        public void ClearBanner(double bonus, string unlock)
+        public void ClearBanner(double bonus, double fame) =>
+            Banner($"밭 클리어!\n보너스 +{Num.Gain(bonus)}\n명성 ★+{Num.Gain(fame)}");
+
+        /// <summary>밭 가운데 큰 문구.</summary>
+        public void Banner(string text)
         {
             var p = Get(true);
-            p.Txt.text = $"밭 클리어!\n보너스 +{Num.Gain(bonus)}" + (unlock != null ? "\n" + unlock : "");
+            p.Txt.text = text;
             p.Txt.fontSize = 72;
             p.Rt.sizeDelta = new Vector2(900, 320);
             p.Rt.anchoredPosition = new Vector2(0, 40);

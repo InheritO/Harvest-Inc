@@ -9,9 +9,46 @@ namespace HarvestInc
     public sealed class Game : MonoBehaviour
     {
         public double Coins;
-        public double TotalEarned;
-        public int Level = 1;
+        public double TotalEarned; // 이번 판에 번 코인 (개척하면 0)
+        public double Fame;
         public int SickleLevel;
+
+        // ── 개척해도 유지 ──
+        public double GoldenSeeds;
+        public int Stage = 1;
+        public int BestFieldIndex;
+        public bool PrestigeOpened;
+        public readonly int[] PermLevels = new int[Balance.Perms.Length];
+
+        int Perm(PermKind k) => PermLevels[(int)k];
+
+        public double RewardMult =>
+            (1 + Balance.PermRewardStep * Perm(PermKind.Reward)) * Math.Pow(Balance.StageRewardMult, Stage - 1);
+        public double HpMult => Math.Pow(Balance.StageHpMult, Stage - 1);
+        public double SickleMult => 1 + Balance.PermSickleStep * Perm(PermKind.Sickle);
+        public double ClearBonusRatio => Balance.ClearBonusRatio + Balance.PermClearBonusStep * Perm(PermKind.ClearBonus);
+        double MachinePriceMult => Math.Pow(Balance.PermDiscountMult, Perm(PermKind.MachineDiscount));
+
+        public double FieldHp(int i) => Balance.Fields[i].Hp * HpMult;
+        public double FieldReward(int i) => Balance.Fields[i].Reward * RewardMult;
+
+        /// <summary>지금 개척하면 받는 황금 씨앗.</summary>
+        public double PrestigeSeeds => Math.Floor(Balance.PrestigeSeedFactor * Math.Sqrt(Math.Max(0, TotalEarned)) + 1e-9);
+
+        public int FieldIndex { get; private set; }
+        public FieldDef Field => Balance.Fields[FieldIndex];
+        public readonly bool[] Unlocked = new bool[Balance.Fields.Length];
+
+        /// <summary>다음에 열 수 있는 밭. 모두 열었으면 -1.</summary>
+        public int NextLockedIndex
+        {
+            get
+            {
+                for (int i = 0; i < Unlocked.Length; i++)
+                    if (!Unlocked[i]) return i;
+                return -1;
+            }
+        }
 
         public readonly Crop[] Crops = new Crop[Balance.CellCount];
         public int AliveCount { get; private set; }
@@ -19,8 +56,10 @@ namespace HarvestInc
         public bool Regenerating { get; private set; }
         public MachineState[] Machines { get; private set; }
 
-        public double SickleDamage => Balance.SickleBaseDamage * Math.Pow(Balance.SickleUpgradeMult, SickleLevel);
-        public double NextSickleDamage => Balance.SickleBaseDamage * Math.Pow(Balance.SickleUpgradeMult, SickleLevel + 1);
+        public double SickleDamage =>
+            Balance.SickleBaseDamage * Math.Pow(Balance.SickleUpgradeMult, SickleLevel) * SickleMult;
+        public double NextSickleDamage =>
+            Balance.SickleBaseDamage * Math.Pow(Balance.SickleUpgradeMult, SickleLevel + 1) * SickleMult;
         public double SickleUpPrice =>
             Math.Ceiling(Balance.SickleUpgradeBasePrice * Math.Pow(Balance.SickleUpgradePriceGrowth, SickleLevel));
 
@@ -39,13 +78,22 @@ namespace HarvestInc
             this.sfx = sfx;
             Machines = new[] { new MachineState(Balance.Mower), new MachineState(Balance.Combine) };
             for (int i = 0; i < Crops.Length; i++) Crops[i] = new Crop(i);
+            Unlocked[0] = true;
+            FieldIndex = 0;
+
+            bool loaded = SaveSystem.TryLoad(out var data);
+            if (loaded) ApplySaveData(data);
             SpawnField();
+            if (loaded) fx.Toast("저장된 게임을 불러왔다");
         }
 
         void Update()
         {
             if (Machines == null) return;
             float dt = Time.deltaTime;
+
+            saveTimer += Time.unscaledDeltaTime;
+            if (saveTimer >= AutoSaveInterval) Save();
 
             if (Regenerating)
             {
@@ -64,12 +112,11 @@ namespace HarvestInc
 
         void SpawnField()
         {
-            var type = Balance.CropTypeFor(Level);
-            double hp = Balance.CropHp(Level);
-            double reward = Balance.CropReward(Level);
+            var def = Field;
+            double hp = FieldHp(FieldIndex), reward = FieldReward(FieldIndex);
             foreach (var c in Crops)
             {
-                c.Kind = type.Kind;
+                c.Kind = def.Kind;
                 c.MaxHp = c.Hp = hp;
                 c.Reward = reward;
                 c.Alive = true;
@@ -122,20 +169,240 @@ namespace HarvestInc
 
         void ClearField()
         {
-            double bonus = fieldEarned * Balance.ClearBonusRatio;
+            double bonus = fieldEarned * ClearBonusRatio;
             Earn(bonus);
+            double fame = Field.Fame;
+            Fame += fame;
 
-            var before = Balance.CropTypeFor(Level);
-            Level++;
-            var after = Balance.CropTypeFor(Level);
-            string unlock = before != after ? $"새 작물: {after.Name}!" : null;
-
-            fx.ClearBanner(bonus, unlock);
+            fx.ClearBanner(bonus, fame);
             fx.Shake();
             sfx.Clear();
 
+            StartRegen();
+        }
+
+        void StartRegen()
+        {
             Regenerating = true;
             regenTimer = Balance.RegenDelay;
+        }
+
+        // ── 밭 이동 ──
+
+        /// <summary>다음 밭을 명성으로 열고 바로 이동한다. 순서대로만 열 수 있다.</summary>
+        public void UnlockField(int index)
+        {
+            if (index != NextLockedIndex) return;
+            double cost = Balance.Fields[index].UnlockCost;
+            if (Fame + 1e-9 < cost)
+            {
+                sfx.Deny();
+                return;
+            }
+            Fame = Math.Max(0, Fame - cost);
+            Unlocked[index] = true;
+            BestFieldIndex = Math.Max(BestFieldIndex, index);
+            sfx.Buy();
+            MoveTo(index);
+
+            if (!PrestigeOpened && index >= Balance.PrestigeFieldIndex)
+            {
+                PrestigeOpened = true;
+                fx.Banner("새 농장 개척이 열렸다!\n상점 → 개척 탭");
+            }
+            Save();
+        }
+
+        // ── 새 농장 개척 ──
+
+        /// <summary>이번 개척에 필요한 명성. 개척할 때마다 늘어난다.</summary>
+        public double PrestigeFameCost =>
+            Math.Ceiling(Balance.PrestigeFameBase * Math.Pow(Balance.PrestigeFameGrowth, Stage - 1) - 1e-9);
+
+        public bool CanPrestige => PrestigeOpened && Fame + 1e-9 >= PrestigeFameCost;
+
+        /// <summary>지금 농장을 팔고 황금 씨앗을 받아 다음 단계에서 다시 시작한다.</summary>
+        public void Prestige()
+        {
+            if (!CanPrestige)
+            {
+                sfx.Deny();
+                return;
+            }
+            double seeds = PrestigeSeeds; // 명성은 아래에서 어차피 0으로 초기화되므로 따로 차감하지 않는다
+            GoldenSeeds += seeds;
+            Stage++;
+            ResetRun();
+
+            fx.Banner($"새 농장 개척!\n{Stage}단계 · 황금 씨앗 +{Num.Gain(seeds)}");
+            fx.Shake(24f);
+            sfx.Clear();
+            Save();
+        }
+
+        /// <summary>데이터 초기화: 황금 씨앗, 영구 강화, 단계까지 모두 지우고 처음부터.</summary>
+        public void ResetAll()
+        {
+            GoldenSeeds = 0;
+            Stage = 1;
+            BestFieldIndex = 0;
+            PrestigeOpened = false;
+            for (int i = 0; i < PermLevels.Length; i++) PermLevels[i] = 0;
+            ResetRun();
+
+            fx.Banner("모든 진행을 초기화했다");
+            sfx.Clear();
+            Save();
+        }
+
+        /// <summary>이번 판 진행을 처음 상태로. 개척과 데이터 초기화가 함께 쓴다.</summary>
+        void ResetRun()
+        {
+            Coins = 0;
+            TotalEarned = 0;
+            Fame = 0;
+            SickleLevel = 0;
+            for (int i = 0; i < Unlocked.Length; i++) Unlocked[i] = i == 0;
+            foreach (var m in Machines)
+            {
+                m.Reset();
+                m.PriceMult = MachinePriceMult;
+            }
+            if (Perm(PermKind.StartMower) > 0) GiveMachine(Machines[0]);
+
+            FieldIndex = 0;
+            foreach (var c in Crops) c.Alive = false;
+            AliveCount = 0;
+            Target = null;
+            field.HideAll();
+            StartRegen();
+        }
+
+        // ── 저장 ──
+
+        public const float AutoSaveInterval = 10f;
+
+        /// <summary>마지막 저장 시각(Time.realtimeSinceStartup). 아직 없으면 음수.</summary>
+        public float LastSaveRealtime { get; private set; } = -1f;
+
+        float saveTimer;
+
+        public void Save()
+        {
+            if (Machines == null) return;
+            if (SaveSystem.Write(ToSaveData())) LastSaveRealtime = Time.realtimeSinceStartup;
+            saveTimer = 0f;
+        }
+
+        void OnApplicationPause(bool paused)
+        {
+            if (paused) Save(); // 모바일에서 앱을 내릴 때
+        }
+
+        void OnApplicationQuit() => Save(); // 에디터에서는 Play를 멈출 때
+
+        SaveData ToSaveData()
+        {
+            var d = new SaveData
+            {
+                coins = Coins,
+                totalEarned = TotalEarned,
+                fame = Fame,
+                sickleLevel = SickleLevel,
+                fieldIndex = FieldIndex,
+                unlocked = (bool[])Unlocked.Clone(),
+                machines = new MachineSave[Machines.Length],
+                goldenSeeds = GoldenSeeds,
+                stage = Stage,
+                bestFieldIndex = BestFieldIndex,
+                prestigeOpened = PrestigeOpened,
+                permLevels = (int[])PermLevels.Clone(),
+            };
+            for (int i = 0; i < Machines.Length; i++)
+            {
+                var m = Machines[i];
+                d.machines[i] = new MachineSave
+                {
+                    count = m.Count,
+                    damageLevel = m.DamageLevel,
+                    cooldownLevel = m.CooldownLevel,
+                    precision = m.Precision,
+                };
+            }
+            return d;
+        }
+
+        /// <summary>저장 내용을 적용. 밭·영구 강화 개수가 바뀌어도 겹치는 만큼만 읽는다.</summary>
+        void ApplySaveData(SaveData d)
+        {
+            Coins = Math.Max(0, d.coins);
+            TotalEarned = Math.Max(0, d.totalEarned);
+            Fame = Math.Max(0, d.fame);
+            SickleLevel = Math.Max(0, d.sickleLevel);
+            GoldenSeeds = Math.Max(0, d.goldenSeeds);
+            Stage = Math.Max(1, d.stage);
+            BestFieldIndex = Mathf.Clamp(d.bestFieldIndex, 0, Unlocked.Length - 1);
+            PrestigeOpened = d.prestigeOpened;
+
+            if (d.unlocked != null)
+                for (int i = 0; i < Unlocked.Length && i < d.unlocked.Length; i++) Unlocked[i] = d.unlocked[i];
+            Unlocked[0] = true;
+
+            if (d.permLevels != null)
+                for (int i = 0; i < PermLevels.Length && i < d.permLevels.Length; i++)
+                    PermLevels[i] = Math.Max(0, d.permLevels[i]);
+
+            for (int i = 0; i < Machines.Length; i++)
+            {
+                var m = Machines[i];
+                m.Reset();
+                m.PriceMult = MachinePriceMult;
+                if (d.machines == null || i >= d.machines.Length || d.machines[i] == null) continue;
+                var s = d.machines[i];
+                m.DamageLevel = Math.Max(0, s.damageLevel);
+                m.CooldownLevel = Mathf.Clamp(s.cooldownLevel, 0, Balance.CooldownUpMaxLevel);
+                m.Precision = s.precision;
+                int count = Mathf.Clamp(s.count, 0, Balance.MaxMachinesPerType);
+                for (int k = 0; k < count; k++) GiveMachine(m); // 쿨타임 엇갈림도 새로 계산된다
+            }
+
+            FieldIndex = d.fieldIndex >= 0 && d.fieldIndex < Unlocked.Length && Unlocked[d.fieldIndex] ? d.fieldIndex : 0;
+        }
+
+        public double PermPrice(int i)
+        {
+            var d = Balance.Perms[i];
+            return Math.Ceiling(d.BasePrice * Math.Pow(d.Growth, PermLevels[i]) - 1e-9);
+        }
+
+        public bool PermMaxed(int i) => Balance.Perms[i].MaxLevel > 0 && PermLevels[i] >= Balance.Perms[i].MaxLevel;
+
+        public void BuyPerm(int i)
+        {
+            if (PermMaxed(i)) return;
+            double price = PermPrice(i);
+            if (GoldenSeeds + 1e-9 < price)
+            {
+                sfx.Deny();
+                return;
+            }
+            GoldenSeeds -= price;
+            PermLevels[i]++;
+            foreach (var m in Machines) m.PriceMult = MachinePriceMult;
+            sfx.Buy();
+        }
+
+        /// <summary>연 밭으로 이동. 지금 밭의 남은 작물은 보상 없이 사라진다.</summary>
+        public void MoveTo(int index)
+        {
+            if (index < 0 || index >= Unlocked.Length || !Unlocked[index] || index == FieldIndex) return;
+            FieldIndex = index;
+            foreach (var c in Crops) c.Alive = false;
+            AliveCount = 0;
+            Target = null;
+            field.HideAll();
+            fx.Toast($"{Field.Name} 밭으로 이동");
+            StartRegen();
         }
 
         void Earn(double v)
@@ -302,6 +569,11 @@ namespace HarvestInc
         public void BuyMachine(MachineState m)
         {
             if (!m.CanBuyMore || !TrySpend(m.BuyPrice)) return;
+            GiveMachine(m);
+        }
+
+        void GiveMachine(MachineState m)
+        {
             int k = m.Count;
             m.Count++;
             float frac = k * 0.618034f % 1f; // 쿨타임을 엇갈리게
@@ -337,12 +609,21 @@ namespace HarvestInc
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb == null) return;
-            if (kb.spaceKey.wasPressedThisFrame) Swing();
             if (kb.f1Key.wasPressedThisFrame)
             {
-                double amount = Math.Max(1000, Balance.CropReward(Level) * Balance.CellCount * 10);
+                double amount = Math.Max(1000, Field.Reward * Balance.CellCount * 10);
                 Earn(amount);
                 fx.Toast($"디버그: +{Num.Gain(amount)} 코인");
+            }
+            if (kb.f3Key.wasPressedThisFrame)
+            {
+                Fame += 10;
+                fx.Toast("디버그: 명성 +10");
+            }
+            if (kb.f4Key.wasPressedThisFrame)
+            {
+                GoldenSeeds += 5;
+                fx.Toast("디버그: 황금 씨앗 +5");
             }
             if (kb.f2Key.wasPressedThisFrame && !Regenerating)
             {

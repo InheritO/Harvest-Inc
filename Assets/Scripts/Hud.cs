@@ -10,11 +10,13 @@ namespace HarvestInc
     public sealed class Hud : MonoBehaviour
     {
         Game game;
-        Text coins, level, progressText, sickleText, machinesText;
+        Text coins, fame, fieldLabel, progressText, sickleText;
+        Image fieldButton;
+        float blink;
         RectTransform progressFill;
         const float ProgressWidth = 972f;
 
-        public static Hud Build(Game game, RectTransform safe, Action onShop)
+        public static Hud Build(Game game, RectTransform safe, Action onShop, Action onField, Action onSettings)
         {
             var hud = safe.gameObject.AddComponent<Hud>();
             hud.game = game;
@@ -22,10 +24,15 @@ namespace HarvestInc
             // 상단
             Ui.MakeImage("TopBar", safe, new Vector2(0, Ui.Top(110)), new Vector2(1040, 200), Palette.Bar, Ui.Rounded);
             Ui.MakeImage("CoinIcon", safe, new Vector2(-450, Ui.Top(62)), new Vector2(64, 64), Palette.Gold, Ui.Circle);
-            hud.coins = Ui.MakeText("Coins", safe, new Vector2(-150, Ui.Top(62)), new Vector2(500, 80), "0", 60,
+            hud.coins = Ui.MakeText("Coins", safe, new Vector2(-240, Ui.Top(62)), new Vector2(320, 80), "0", 60,
                 Color.white, TextAnchor.MiddleLeft, FontStyle.Bold);
-            hud.level = Ui.MakeText("Level", safe, new Vector2(290, Ui.Top(62)), new Vector2(420, 70), "", 42,
-                Color.white, TextAnchor.MiddleRight);
+            hud.fame = Ui.MakeText("Fame", safe, new Vector2(30, Ui.Top(62)), new Vector2(220, 80), "", 50,
+                Palette.Fame, TextAnchor.MiddleLeft, FontStyle.Bold);
+
+            // 밭 이름 = 밭 이동 버튼
+            var fieldBtn = Ui.MakeButton("FieldButton", safe, new Vector2(340, Ui.Top(62)), new Vector2(320, 84), "",
+                40, Palette.Shop, onField, out hud.fieldLabel);
+            hud.fieldButton = (Image)fieldBtn.targetGraphic;
 
             var barBg = Ui.MakeImage("Progress", safe, new Vector2(0, Ui.Top(150)), new Vector2(980, 44),
                 new Color(0f, 0f, 0f, 0.45f), Ui.Rounded);
@@ -52,10 +59,12 @@ namespace HarvestInc
             Ui.MakeButton("ShopButton", safe, new Vector2(380, Ui.Top(1690)), new Vector2(240, 150), "상점", 52,
                 Palette.Shop, onShop, out _);
 
-            // 하단: 보유 농기계
-            hud.machinesText = Ui.MakeText("Machines", safe, new Vector2(-380, Ui.Top(1690)), new Vector2(260, 200),
-                "", 32, Color.white);
-            Ui.AddOutline(hud.machinesText, 1.5f);
+            // 하단 오른쪽 아래: 설정
+            Ui.MakeButton("SettingsButton", safe, new Vector2(380, Ui.Top(1855)), new Vector2(200, 70), "설정", 30,
+                Palette.Unaffordable, onSettings, out _);
+
+            // 하단 왼쪽: 보유 농기계 쿨타임 게이지
+            MachineGauges.Build(game, safe, new Vector2(-530, Ui.Top(1480)));
 
             return hud;
         }
@@ -63,7 +72,16 @@ namespace HarvestInc
         void Update()
         {
             coins.text = Num.Coins(game.Coins);
-            level.text = $"밭 레벨 {game.Level} · {Balance.CropTypeFor(game.Level).Name}";
+            fame.text = "★ " + Num.Coins(game.Fame);
+            fieldLabel.text = $"{game.Field.Name} 밭  ▼";
+
+            // 다음 밭을 열 수 있으면 버튼이 깜빡인다
+            int next = game.NextLockedIndex;
+            bool canUnlock = next >= 0 && game.Fame + 1e-9 >= Balance.Fields[next].UnlockCost;
+            blink = canUnlock ? blink + Time.deltaTime * 4f : 0f;
+            fieldButton.color = canUnlock
+                ? Color.Lerp(Palette.Shop, Palette.Affordable, 0.5f + 0.5f * Mathf.Sin(blink))
+                : Palette.Shop;
 
             int total = Balance.CellCount;
             int alive = game.Regenerating ? 0 : game.AliveCount;
@@ -73,8 +91,6 @@ namespace HarvestInc
             progressText.text = game.Regenerating ? "밭 클리어!" : $"남은 작물 {alive} / {total}";
 
             sickleText.text = $"낫 피해 {Num.Stat(game.SickleDamage)}";
-            var m = game.Machines;
-            machinesText.text = $"{m[0].Def.Name} ×{m[0].Count}\n{m[1].Def.Name} ×{m[1].Count}";
         }
     }
 
@@ -120,8 +136,32 @@ namespace HarvestInc
             OnFire?.Invoke();
         }
 
+        /// <summary>키보드 키를 손가락 하나처럼 다룬다 (터치 포인터 id와 겹치지 않는 값).</summary>
+        const int KeyPointerId = -1000;
+
+        void PollKeyboard()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb == null) return;
+            int i = pointers.IndexOf(KeyPointerId);
+            if (kb.spaceKey.wasPressedThisFrame && i < 0)
+            {
+                pointers.Add(KeyPointerId);
+                heldTimes.Add(0f);
+                Fire();
+            }
+            else if (i >= 0 && !kb.spaceKey.isPressed)
+            {
+                pointers.RemoveAt(i);
+                heldTimes.RemoveAt(i);
+            }
+#endif
+        }
+
         void Update()
         {
+            PollKeyboard();
             float dt = Time.deltaTime;
             bool repeating = false;
             for (int i = 0; i < heldTimes.Count; i++)

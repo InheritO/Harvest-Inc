@@ -20,7 +20,10 @@ namespace HarvestInc
         readonly List<Row> rows = new List<Row>();
         Game game;
 
-        public static ShopPanel Build(Game game, RectTransform parent)
+        GameObject prestigeTab;
+        Text prestigeTabLabel;
+
+        public static ShopPanel Build(Game game, RectTransform parent, Action onPrestigeTab)
         {
             var bg = Ui.MakeImage("Shop", parent, new Vector2(0, Ui.Top(965)), new Vector2(Width, Height),
                 Palette.Panel, Ui.Rounded, raycast: true); // 뒤쪽 밭 터치를 막는다
@@ -33,6 +36,11 @@ namespace HarvestInc
                 TextAnchor.MiddleLeft, FontStyle.Bold);
             Ui.MakeButton("Close", t, new Vector2(400, top - 55), new Vector2(170, 80), "닫기", 38,
                 Palette.Unaffordable, shop.Toggle, out _);
+
+            // 개척 탭: 옥수수 밭을 처음 열면 나타나고, 받을 황금 씨앗을 항상 보여준다
+            shop.prestigeTab = Ui.MakeButton("PrestigeTab", t, new Vector2(90, top - 55), new Vector2(330, 80), "", 32,
+                Palette.GoldButton, onPrestigeTab, out shop.prestigeTabLabel).gameObject;
+            shop.prestigeTabLabel.color = Palette.Brown;
 
             float cursor = top - 105f;
 
@@ -93,6 +101,8 @@ namespace HarvestInc
             if (gameObject.activeSelf) transform.SetAsLastSibling();
         }
 
+        public void Close() => gameObject.SetActive(false);
+
         void AddRow(Transform parent, ref float cursor, Action buy, Action<Row> refresh)
         {
             float y = cursor - RowHeight / 2f;
@@ -133,6 +143,12 @@ namespace HarvestInc
         void RefreshAll()
         {
             foreach (var r in rows) r.Refresh(r);
+            bool open = game.PrestigeOpened;
+            if (prestigeTab.activeSelf != open) prestigeTab.SetActive(open);
+            if (open)
+                prestigeTabLabel.text = game.CanPrestige
+                    ? $"개척 가능 ▶  씨앗 +{Num.Coins(game.PrestigeSeeds)}"
+                    : $"개척 ▶  ★{Num.Coins(game.Fame)}/{Num.Price(game.PrestigeFameCost)}";
         }
 
         void OnEnable()

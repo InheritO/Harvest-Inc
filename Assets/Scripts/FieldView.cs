@@ -25,7 +25,9 @@ namespace HarvestInc
         {
             CropKind.Wheat => new Color(0.96f, 0.80f, 0.32f),
             CropKind.Rice => new Color(0.93f, 0.90f, 0.62f),
-            _ => new Color(1f, 0.84f, 0.25f),
+            CropKind.Corn => new Color(1f, 0.84f, 0.25f),
+            CropKind.Carrot => new Color(1f, 0.55f, 0.15f),
+            _ => new Color(0.95f, 0.5f, 0.1f),
         };
 
         public static readonly Color Leaf = new Color(0.42f, 0.68f, 0.26f);
@@ -43,6 +45,12 @@ namespace HarvestInc
         public void OnFieldSpawned()
         {
             for (int i = 0; i < cells.Length; i++) cells[i].Spawn(game.Crops[i], Random.Range(0f, 0.18f));
+        }
+
+        /// <summary>밭 이동: 작물을 모두 걷어내고 빈 흙만 남긴다.</summary>
+        public void HideAll()
+        {
+            foreach (var c in cells) c.Hide();
         }
 
         public void OnHit(Crop c) => cells[c.Index].Hit();
@@ -112,6 +120,32 @@ namespace HarvestInc
                         new PartDef(true, -22, 58, 13, 32, 45, head),
                         new PartDef(true, 24, 56, 13, 32, -50, head),
                         new PartDef(true, 9, 68, 14, 34, -55, head),
+                    };
+                }
+                case CropKind.Carrot:
+                {
+                    var root = HeadColor(kind);
+                    return new[]
+                    {
+                        new PartDef(true, -14, 48, 12, 52, 22, Leaf),
+                        new PartDef(true, 14, 48, 12, 52, -22, Leaf),
+                        new PartDef(true, 0, 54, 13, 60, 0, new Color(0.36f, 0.62f, 0.22f)),
+                        new PartDef(true, 0, 16, 40, 34, 0, root),
+                        new PartDef(false, -6, 12, 14, 3, 8, new Color(0.85f, 0.42f, 0.1f)),
+                    };
+                }
+                case CropKind.Pumpkin:
+                {
+                    var body = HeadColor(kind);
+                    var rib = new Color(0.85f, 0.42f, 0.08f);
+                    return new[]
+                    {
+                        new PartDef(true, -36, 18, 30, 18, 20, Leaf),
+                        new PartDef(true, 0, 32, 92, 64, 0, body),
+                        new PartDef(true, -20, 32, 26, 60, 0, rib),
+                        new PartDef(true, 20, 32, 26, 60, 0, rib),
+                        new PartDef(true, 0, 32, 30, 64, 0, body),
+                        new PartDef(false, 2, 70, 10, 18, -12, new Color(0.45f, 0.38f, 0.15f)),
                     };
                 }
                 default:
@@ -211,6 +245,13 @@ namespace HarvestInc
                 plant.gameObject.SetActive(false);
                 hpBar.SetActive(false);
                 stub.enabled = true;
+            }
+
+            public void Hide()
+            {
+                plant.gameObject.SetActive(false);
+                hpBar.SetActive(false);
+                stub.enabled = false;
             }
 
             public void Tick(float dt, Crop c)

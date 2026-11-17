@@ -59,9 +59,25 @@ namespace HarvestInc
             field.Build(game);
             game.Init(field, fx, sfx);
 
+            // 상점, 개척, 밭 이동, 설정 창은 한 번에 하나만 열린다
             ShopPanel shop = null;
-            Hud.Build(game, safe, () => shop.Toggle());
-            shop = ShopPanel.Build(game, safe);
+            FieldPanel fields = null;
+            PrestigePanel prestige = null;
+            SettingsPanel settings = null;
+            Hud.Build(game, safe,
+                onShop: () =>
+                {
+                    fields.Close();
+                    settings.Close();
+                    if (prestige.gameObject.activeSelf) prestige.Close();
+                    else shop.Toggle();
+                },
+                onField: () => { shop.Close(); prestige.Close(); settings.Close(); fields.Toggle(); },
+                onSettings: () => { shop.Close(); prestige.Close(); fields.Close(); settings.Toggle(); });
+            shop = ShopPanel.Build(game, safe, onPrestigeTab: () => { shop.Close(); prestige.Open(); });
+            prestige = PrestigePanel.Build(game, safe, onShopTab: () => { prestige.Close(); shop.Toggle(); });
+            fields = FieldPanel.Build(game, safe);
+            settings = SettingsPanel.Build(game, safe);
         }
 
         static void EnsureEventSystem()

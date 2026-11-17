@@ -15,6 +15,9 @@ namespace HarvestInc
         public static readonly Color Panel = new Color(0.13f, 0.10f, 0.08f, 0.96f);
         public static readonly Color Row = new Color(1f, 1f, 1f, 0.07f);
         public static readonly Color Gold = new Color(1f, 0.84f, 0.25f);
+        public static readonly Color Fame = new Color(0.65f, 0.85f, 1f);
+        public static readonly Color GoldButton = new Color(0.95f, 0.78f, 0.3f);
+        public static readonly Color Danger = new Color(0.6f, 0.22f, 0.18f);
         public static readonly Color Progress = new Color(0.55f, 0.85f, 0.3f);
         public static readonly Color HpBack = new Color(0f, 0f, 0f, 0.6f);
         public static readonly Color HpFill = new Color(1f, 0.42f, 0.2f);
