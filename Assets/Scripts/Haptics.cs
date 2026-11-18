@@ -62,7 +62,7 @@ namespace HarvestInc
         {
             if (!Ready()) return;
             lastTime = Time.unscaledTime;
-            if (!Platform.Waveform(timings, amps) && big) Handheld.Vibrate();
+            if (!Platform.Waveform(timings, amps) && big) Platform.Fallback();
         }
 
         static bool Ready() => Enabled && Platform.Available;
@@ -158,10 +158,17 @@ namespace HarvestInc
                     return false;
                 }
             }
+
+            /// <summary>
+            /// 패턴 진동이 실패했을 때 Unity 기본 진동(세기 조절 불가). Handheld는 모바일 빌드에만 있다.
+            /// 이 호출이 있어야 Unity가 안드로이드 진동 권한(VIBRATE)을 자동으로 넣는다.
+            /// </summary>
+            public static void Fallback() => Handheld.Vibrate();
 #else
             public static bool Available => false;
             public static void OneShot(int ms, int amp) { }
             public static bool Waveform(long[] timings, int[] amps) => true;
+            public static void Fallback() { }
 #endif
         }
     }
