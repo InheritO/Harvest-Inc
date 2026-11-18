@@ -35,6 +35,7 @@ namespace HarvestInc
             var game = root.AddComponent<Game>();
             var sfx = root.AddComponent<Sfx>();
             SoundSettings.Load();
+            Haptics.Load();
             root.AddComponent<Music>();
 
             // 캔버스: 1080×1920 기준, 화면 비율이 달라도 전체가 보이도록 Expand

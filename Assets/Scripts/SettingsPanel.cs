@@ -9,8 +9,8 @@ namespace HarvestInc
         const float ConfirmWindow = 3f;
 
         Game game;
-        Text info, resetLabel, saveLabel, bgmValue, sfxValue;
-        Image resetImg;
+        Text info, resetLabel, saveLabel, bgmValue, sfxValue, vibLabel;
+        Image resetImg, vibImg;
         float confirmUntil = -1f;
         float savedFlashUntil = -1f;
 
@@ -28,33 +28,42 @@ namespace HarvestInc
                 Palette.Unaffordable, panel.Close, out _);
 
             // 소리 크기
-            panel.bgmValue = panel.VolumeRow(t, 300, "배경음악", SoundSettings.Bgm, SoundSettings.SetBgm);
-            panel.sfxValue = panel.VolumeRow(t, 200, "효과음", SoundSettings.Sfx, v =>
+            panel.bgmValue = panel.VolumeRow(t, 320, "배경음악", SoundSettings.Bgm, SoundSettings.SetBgm);
+            panel.sfxValue = panel.VolumeRow(t, 230, "효과음", SoundSettings.Sfx, v =>
             {
                 SoundSettings.SetSfx(v);
                 sfx.Coin(); // 움직이는 동안 크기를 바로 들어 볼 수 있게
             });
 
-            panel.info = Ui.MakeText("Info", t, new Vector2(0, 95), new Vector2(800, 100), "", 30,
+            // 진동 켜기/끄기
+            Ui.MakeText("Vibration", t, new Vector2(-300, 140), new Vector2(220, 60), "진동", 36, Color.white,
+                TextAnchor.MiddleLeft, FontStyle.Bold);
+            Ui.MakeText("VibrationNote", t, new Vector2(-40, 140), new Vector2(300, 60), "모바일 전용", 26,
+                Palette.TextDim, TextAnchor.MiddleLeft);
+            var vib = Ui.MakeButton("VibrationToggle", t, new Vector2(300, 140), new Vector2(190, 70), "", 34,
+                Palette.Affordable, () => Haptics.SetEnabled(!Haptics.Enabled), out panel.vibLabel);
+            panel.vibImg = (Image)vib.targetGraphic;
+
+            panel.info = Ui.MakeText("Info", t, new Vector2(0, 50), new Vector2(800, 100), "", 30,
                 Palette.TextDim, TextAnchor.MiddleCenter);
 
-            Ui.MakeButton("SaveNow", t, new Vector2(-135, -20), new Vector2(250, 100), "", 38, Palette.Shop,
+            Ui.MakeButton("SaveNow", t, new Vector2(-135, -55), new Vector2(250, 100), "", 38, Palette.Shop,
                 panel.OnSaveClicked, out panel.saveLabel);
-            Ui.MakeButton("Guide", t, new Vector2(135, -20), new Vector2(250, 100), "게임 방법", 38, Palette.Affordable,
+            Ui.MakeButton("Guide", t, new Vector2(135, -55), new Vector2(250, 100), "게임 방법", 38, Palette.Affordable,
                 () =>
                 {
                     panel.Close();
                     onGuide();
                 }, out _);
 
-            Ui.MakeButton("Quit", t, new Vector2(0, -135), new Vector2(520, 100), "저장하고 종료", 38,
+            Ui.MakeButton("Quit", t, new Vector2(0, -165), new Vector2(520, 100), "저장하고 종료", 38,
                 Palette.Unaffordable, panel.OnQuitClicked, out _);
 
-            var reset = Ui.MakeButton("Reset", t, new Vector2(0, -262), new Vector2(520, 110), "", 36,
+            var reset = Ui.MakeButton("Reset", t, new Vector2(0, -285), new Vector2(520, 110), "", 36,
                 Palette.Unaffordable, panel.OnResetClicked, out panel.resetLabel);
             panel.resetImg = (Image)reset.targetGraphic;
 
-            Ui.MakeText("ResetNote", t, new Vector2(0, -372), new Vector2(820, 70),
+            Ui.MakeText("ResetNote", t, new Vector2(0, -390), new Vector2(820, 70),
                 "코인 · 명성 · 밭 · 농기계 · 강화 · 황금 씨앗 · 영구 강화 · 개척 단계가 모두 지워진다", 24,
                 Palette.TextDim, TextAnchor.MiddleCenter);
 
@@ -123,6 +132,8 @@ namespace HarvestInc
             saveLabel.text = Time.unscaledTime <= savedFlashUntil ? "저장했다!" : "지금 저장";
             bgmValue.text = Mathf.RoundToInt(SoundSettings.Bgm * 100f) + "%";
             sfxValue.text = Mathf.RoundToInt(SoundSettings.Sfx * 100f) + "%";
+            vibLabel.text = Haptics.Enabled ? "켜짐" : "꺼짐";
+            vibImg.color = Haptics.Enabled ? Palette.Affordable : Palette.Unaffordable;
 
             bool confirming = Time.unscaledTime <= confirmUntil;
             resetLabel.text = confirming ? "한 번 더 누르면\n모든 진행 삭제" : "데이터 초기화";

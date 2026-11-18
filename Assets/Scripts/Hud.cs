@@ -97,7 +97,8 @@ namespace HarvestInc
     /// <summary>누르는 순간 1회, 계속 누르고 있으면 일정 간격으로 반복. 손가락마다 따로 센다.</summary>
     public sealed class HoldButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     {
-        public Action OnFire;
+        /// <summary>인자: 꾹 누르기 자동 반복이면 true.</summary>
+        public Action<bool> OnFire;
 
         readonly List<int> pointers = new List<int>();
         readonly List<float> heldTimes = new List<float>();
@@ -130,10 +131,10 @@ namespace HarvestInc
             heldTimes.Clear();
         }
 
-        void Fire()
+        void Fire(bool repeat = false)
         {
             punch = 1f;
-            OnFire?.Invoke();
+            OnFire?.Invoke(repeat);
         }
 
         /// <summary>키보드 키를 손가락 하나처럼 다룬다 (터치 포인터 id와 겹치지 않는 값).</summary>
@@ -174,7 +175,7 @@ namespace HarvestInc
                 repeatTimer -= dt;
                 if (repeatTimer <= 0f)
                 {
-                    Fire();
+                    Fire(repeat: true);
                     repeatTimer += Balance.HoldInterval;
                     if (repeatTimer <= 0f) repeatTimer = Balance.HoldInterval;
                 }

@@ -149,14 +149,14 @@ namespace HarvestInc
             field.OnFieldSpawned();
         }
 
-        void Damage(Crop c, double dmg)
+        void Damage(Crop c, double dmg, bool bySickle = false)
         {
             if (!c.Alive) return; // 제거된 작물에는 피해 없음
             c.Hp -= dmg;
             if (c.Hp <= 1e-6)
             {
                 c.Hp = 0; // 초과 피해는 사라진다
-                Kill(c);
+                Kill(c, bySickle);
             }
             else
             {
@@ -164,7 +164,7 @@ namespace HarvestInc
             }
         }
 
-        void Kill(Crop c)
+        void Kill(Crop c, bool bySickle = false)
         {
             c.Alive = false;
             AliveCount--;
@@ -176,6 +176,7 @@ namespace HarvestInc
             fx.CoinPopup(c.Index, c.Reward);
             sfx.Harvest();
             sfx.Coin();
+            if (bySickle) Haptics.Kill(); // 농기계가 쓰러뜨린 건 진동 없음
 
             if (AliveCount == 0)
             {
@@ -198,6 +199,7 @@ namespace HarvestInc
             fx.ClearBanner(bonus, fame);
             fx.Shake();
             sfx.Clear();
+            Haptics.Clear();
 
             StartRegen();
         }
@@ -218,12 +220,14 @@ namespace HarvestInc
             if (Fame + 1e-9 < cost)
             {
                 sfx.Deny();
+                Haptics.Deny();
                 return;
             }
             Fame = Math.Max(0, Fame - cost);
             Unlocked[index] = true;
             BestFieldIndex = Math.Max(BestFieldIndex, index);
             sfx.Buy();
+            Haptics.Big();
             MoveTo(index);
 
             if (!PrestigeOpened && index >= Balance.PrestigeFieldIndex)
@@ -248,6 +252,7 @@ namespace HarvestInc
             if (!CanPrestige)
             {
                 sfx.Deny();
+                Haptics.Deny();
                 return;
             }
             double seeds = PrestigeSeeds; // 명성은 아래에서 어차피 0으로 초기화되므로 따로 차감하지 않는다
@@ -258,6 +263,7 @@ namespace HarvestInc
             fx.Banner($"새 농장 개척!\n{Stage}단계 · 황금 씨앗 +{Num.Gain(seeds)}");
             fx.Shake(24f);
             sfx.Clear();
+            Haptics.Big();
             Save();
         }
 
@@ -405,12 +411,14 @@ namespace HarvestInc
             if (GoldenSeeds + 1e-9 < price)
             {
                 sfx.Deny();
+                Haptics.Deny();
                 return;
             }
             GoldenSeeds -= price;
             PermLevels[i]++;
             foreach (var m in Machines) m.PriceMult = MachinePriceMult;
             sfx.Buy();
+            Haptics.Buy();
         }
 
         /// <summary>연 밭으로 이동. 지금 밭의 남은 작물은 보상 없이 사라진다.</summary>
@@ -443,14 +451,17 @@ namespace HarvestInc
 
         // ── 직접 수확 ──
 
-        public void Swing()
+        /// <param name="repeat">꾹 누르기 자동 반복이면 true (진동을 더 약하게)</param>
+        public void Swing(bool repeat = false)
         {
             if (Paused || Regenerating || AliveCount == 0) return;
             if (Target == null || !Target.Alive) Target = RandomAlive();
             var t = Target;
             fx.Slash(t.Index);
             sfx.Slash();
-            Damage(t, SickleDamage);
+            if (repeat) Haptics.SwingRepeat();
+            else Haptics.Swing();
+            Damage(t, SickleDamage, bySickle: true);
         }
 
         public void TapCrop(int index)
@@ -575,10 +586,12 @@ namespace HarvestInc
             if (Coins + 1e-9 < price)
             {
                 sfx.Deny();
+                Haptics.Deny();
                 return false;
             }
             Coins = Math.Max(0, Coins - price);
             sfx.Buy();
+            Haptics.Buy();
             return true;
         }
 
