@@ -1,4 +1,4 @@
-# 수확 주식회사 (Harvest Inc.)
+# 수확 주식회사 (Harvest Inc)
 
 **낫 한 자루로 시작해 농기계 군단을 거느리는 농장 방치형 게임**
 
@@ -48,7 +48,7 @@
 | 항목 | 경로 |
 |---|---|
 | 게임 | `C:\Users\<사용자 이름>\AppData\Local\Programs\수확 주식회사` |
-| 저장 데이터 | `C:\Users\<사용자 이름>\AppData\LocalLow\InehritO\Harvest Inc_\save.json` |
+| 저장 데이터 | `C:\Users\<사용자 이름>\AppData\LocalLow\InheritO\Harvest Inc\save.json` |
 
 - 설치 중에 다른 폴더를 고를 수도 있습니다. 관리자 권한으로 설치했다면 `C:\Program Files\수확 주식회사`에 설치됩니다.
 - 탐색기 주소창에 `%LOCALAPPDATA%\Programs\수확 주식회사` 를 붙여 넣으면 게임 폴더로 바로 갈 수 있습니다.
@@ -76,6 +76,7 @@
 - 엔진: Unity 6 (6000.3), uGUI
 - 플랫폼: PC(Windows), Android (세로 화면)
 - 기획서: [design-v1.0.md](design-v1.0.md)
+- 저장소: [github.com/InheritO/Harvest-Inc](https://github.com/InheritO/Harvest-Inc)
 
 ## 크레딧
 
